@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/audit";
+import { isSafeWebhookUrl } from "@/lib/url-safety";
 
 /** Register a webhook for a team (admins only, enforced by RLS). */
 export async function createWebhook(formData: FormData) {
@@ -13,6 +14,8 @@ export async function createWebhook(formData: FormData) {
   const events = formData.getAll("events").map(String);
 
   if (!url) throw new Error("URL is required");
+  const safe = isSafeWebhookUrl(url);
+  if (!safe.ok) throw new Error(`Invalid webhook URL: ${safe.reason}`);
 
   const user = await requireUser();
   const supabase = createClient();

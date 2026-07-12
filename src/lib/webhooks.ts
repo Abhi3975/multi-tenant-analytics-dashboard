@@ -3,6 +3,7 @@ import "server-only";
 import { createHmac } from "crypto";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isSafeWebhookUrl } from "@/lib/url-safety";
 import type { Webhook } from "@/lib/types";
 
 const DELIVERY_TIMEOUT_MS = 5000;
@@ -49,6 +50,22 @@ export async function dispatchWebhook(
         let status: number | null = null;
         let ok = false;
         let error: string | null = null;
+
+        // Re-check at send time (SSRF defense-in-depth; the URL was also
+        // validated at creation).
+        const safe = isSafeWebhookUrl(hook.url);
+        if (!safe.ok) {
+          await admin.from("webhook_deliveries").insert({
+            webhook_id: hook.id,
+            team_id: teamId,
+            event,
+            payload,
+            status_code: null,
+            ok: false,
+            error: `blocked: ${safe.reason}`,
+          });
+          return;
+        }
 
         try {
           const res = await fetch(hook.url, {
