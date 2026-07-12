@@ -2,14 +2,29 @@
 
 export type Role = "admin" | "editor" | "viewer";
 
-export type MetricName = "revenue" | "errors" | "page_views" | "clicks";
+// A metric key. The four built-ins ship globally; teams can define custom keys
+// (Tier 3), so this is a string rather than a closed union.
+export type MetricName = string;
 
-export const METRIC_NAMES: MetricName[] = [
+export const BUILTIN_METRICS = [
   "revenue",
   "errors",
   "page_views",
   "clicks",
-];
+] as const;
+
+/** Kept for back-compat; prefer team-specific definitions from the DB. */
+export const METRIC_NAMES: MetricName[] = [...BUILTIN_METRICS];
+
+export interface MetricDefinition {
+  id: string;
+  team_id: string | null;
+  key: string;
+  label: string;
+  unit: string | null;
+  is_builtin: boolean;
+  created_at: string;
+}
 
 export type WidgetType = "line_chart" | "bar_chart" | "stat";
 
@@ -52,15 +67,67 @@ export interface Membership {
   created_at: string;
 }
 
+export interface Project {
+  id: string;
+  team_id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Dashboard {
   id: string;
   team_id: string;
+  project_id: string;
   name: string;
   layout: Record<string, unknown>;
   created_by: string | null;
   created_at: string;
   updated_at: string;
 }
+
+export interface Webhook {
+  id: string;
+  team_id: string;
+  url: string;
+  events: string[];
+  secret: string;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  webhook_id: string;
+  team_id: string;
+  event: string;
+  payload: Record<string, unknown>;
+  status_code: number | null;
+  ok: boolean;
+  error: string | null;
+  created_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  team_id: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+/** Webhook/audit event names emitted by server actions. */
+export const WEBHOOK_EVENTS = [
+  "dashboard.created",
+  "dashboard.deleted",
+  "widget.added",
+  "widget.removed",
+] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 export interface Widget {
   id: string;
