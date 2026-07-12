@@ -126,7 +126,24 @@ Verified end-to-end against a live local Supabase: SELECT isolation
 (Finance/Marketing disjoint), and write enforcement (viewer 403, editor 201,
 cross-team 403) through real Auth + PostgREST + RLS.
 
-Next: **Tier 2** (realtime co-editing, KPI calcs, anomaly detection).
+**Tier 2 complete.** Implemented:
+
+- Realtime co-editing: grid editor subscribes to `widgets` postgres_changes
+  (RLS-scoped) so add/move/resize/remove sync across clients; the widget the
+  local user is actively dragging is shielded from remote echoes.
+- Presence bar (Supabase Realtime Presence) showing who's on a dashboard, with
+  a "can edit" ring for editors/admins.
+- KPI calculations: `metric_kpis` view (`security_invoker`, RLS-respecting) with
+  latest/previous/avg/min/max/stddev; live `KpiPanel` shows value, Δ% and avg.
+- Anomaly detection: z-score util (`src/lib/anomaly.ts`); red anomaly dots on
+  line/bar charts, a count badge, and an "anomaly" flag on KPI cards. The
+  simulator injects occasional spikes so it's demoable.
+
+Verified live: `metric_kpis` stays RLS-isolated (Carol sees only Marketing), and
+a Realtime `widgets` INSERT is delivered to an authorized subscriber over the
+filtered channel.
+
+Next: **Tier 3** (add Project level, webhooks, audit logs, custom metric defs).
 
 Note: table GRANTs for `authenticated`/`service_role` live in
 `supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns

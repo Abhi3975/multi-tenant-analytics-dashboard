@@ -74,6 +74,21 @@ Try it:
    render fully, but there are **no** drag handles, add/remove, or config
    controls. Even a hand-crafted write is rejected by RLS.
 
+## Tier 2: collaboration & intelligence
+
+- **Realtime co-editing** — Open the same dashboard in two windows (e.g. `alice`
+  and `bob`, both Finance). When one adds / moves / resizes / removes a widget,
+  the other sees it live. Backed by Supabase Realtime on the `widgets` table,
+  RLS-scoped so only teammates receive the changes.
+- **Presence** — The dashboard header shows who else is currently viewing it;
+  editors/admins get a green "can edit" ring.
+- **KPI calculations** — The "Team KPIs" row is computed in Postgres by the
+  `metric_kpis` view (latest, Δ% vs previous, average) and refreshes live. The
+  view uses `security_invoker`, so RLS still isolates tenants.
+- **Anomaly detection** — Metric points more than 2.5σ from the series mean are
+  flagged: red dots on the charts, a count badge, and an "anomaly" tag on KPI
+  cards. Run `npm run simulate` for a minute or two and spikes will appear.
+
 ## How permissions are enforced
 
 Every table has Row Level Security enabled. A user can only read/write rows for
