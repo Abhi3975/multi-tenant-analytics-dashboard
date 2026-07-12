@@ -11,6 +11,7 @@ export const BUILTIN_METRICS = [
   "errors",
   "page_views",
   "clicks",
+  "users",
 ] as const;
 
 /** Kept for back-compat; prefer team-specific definitions from the DB. */
@@ -26,12 +27,13 @@ export interface MetricDefinition {
   created_at: string;
 }
 
-export type WidgetType = "line_chart" | "bar_chart" | "stat";
+export type WidgetType = "line_chart" | "bar_chart" | "stat" | "kpi";
 
 export const WIDGET_TYPES: { value: WidgetType; label: string }[] = [
   { value: "line_chart", label: "Line chart" },
   { value: "bar_chart", label: "Bar chart" },
   { value: "stat", label: "Stat tile" },
+  { value: "kpi", label: "KPI" },
 ];
 
 /** Grid position/size in 12-column grid units. */
@@ -43,8 +45,31 @@ export interface WidgetPosition {
 }
 
 export interface WidgetConfig {
-  metric: MetricName;
+  /** For chart/stat widgets: the metric key to visualize. */
+  metric?: MetricName;
+  /** For KPI widgets: the KPI definition to evaluate. */
+  kpiDefinitionId?: string;
   title?: string;
+}
+
+export interface KpiDefinition {
+  id: string;
+  team_id: string;
+  name: string;
+  formula: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AnomalyAlert {
+  id: string;
+  team_id: string;
+  metric_name: string;
+  value: number;
+  mean: number;
+  stddev: number;
+  z_score: number;
+  created_at: string;
 }
 
 export interface Organization {
@@ -105,6 +130,7 @@ export interface WebhookDelivery {
   status_code: number | null;
   ok: boolean;
   error: string | null;
+  attempts: number;
   created_at: string;
 }
 

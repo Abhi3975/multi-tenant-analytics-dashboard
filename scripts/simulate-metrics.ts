@@ -38,6 +38,7 @@ const METRICS: Record<string, [number, number, boolean]> = {
   errors: [0, 30, true],
   page_views: [3000, 16000, true],
   clicks: [400, 2500, true],
+  users: [1500, 5000, true],
 };
 
 // Per team+metric running value for a smooth random walk.
