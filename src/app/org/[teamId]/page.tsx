@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { LayoutDashboard, Folder, Webhook, ScrollText, Gauge } from "lucide-react";
+import {
+  LayoutDashboard,
+  Folder,
+  Webhook,
+  ScrollText,
+  Gauge,
+  Users,
+} from "lucide-react";
 
 import { requireUser, getTeamRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -81,6 +88,11 @@ export default async function TeamPage({
           )}
           {isAdmin && (
             <>
+              <Button asChild size="sm" variant="ghost">
+                <Link href={`/org/${teamId}/members`}>
+                  <Users className="mr-1" /> Members
+                </Link>
+              </Button>
               <Button asChild size="sm" variant="ghost">
                 <Link href={`/org/${teamId}/webhooks`}>
                   <Webhook className="mr-1" /> Webhooks
