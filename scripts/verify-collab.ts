@@ -105,6 +105,11 @@ async function main() {
       .subscribe((s) => s === "SUBSCRIBED" && resolve());
   });
 
+  // Give the server a moment to fully register the postgres_changes
+  // subscriptions — SUBSCRIBED can fire just before the first event would be
+  // captured, which would drop an INSERT sent in the same instant.
+  await new Promise((r) => setTimeout(r, 800));
+
   // 1. Alice adds a widget -> Bob receives it
   const t1 = Date.now();
   const { data: ins, error: insErr } = await alice
