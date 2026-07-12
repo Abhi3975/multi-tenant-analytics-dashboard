@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { KpiPanel } from "@/components/dashboard/kpi-panel";
 import { PresenceBar } from "@/components/dashboard/presence-bar";
 import { GridEditor } from "./grid-editor";
+import { DashboardTitle } from "./dashboard-title";
 
 export default async function DashboardPage({
   params,
@@ -58,9 +59,11 @@ export default async function DashboardPage({
         </Link>
       </div>
       <header className="mb-6 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          {dashboard.name}
-        </h1>
+        <DashboardTitle
+          dashboardId={dashboardId}
+          initialName={dashboard.name}
+          canEdit={writable}
+        />
         <Badge variant="secondary" className="capitalize">
           {role ?? "no access"}
         </Badge>

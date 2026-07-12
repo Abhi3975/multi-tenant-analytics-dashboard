@@ -85,6 +85,22 @@ export async function updateWidgetPosition(
   if (error) throw new Error(`Could not save layout: ${error.message}`);
 }
 
+/** Rename a dashboard (writers). The change propagates via Realtime on the
+ *  `dashboards` table — no revalidate needed for other viewers. */
+export async function renameDashboard(
+  dashboardId: string,
+  name: string
+): Promise<void> {
+  const clean = name.trim();
+  if (!clean) return;
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("dashboards")
+    .update({ name: clean })
+    .eq("id", dashboardId);
+  if (error) throw new Error(`Could not rename dashboard: ${error.message}`);
+}
+
 export async function updateWidgetConfig(
   widgetId: string,
   config: WidgetConfig
