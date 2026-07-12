@@ -80,7 +80,7 @@ genuinely different remote values (last-write-wins).
 - A Realtime container restart was needed after publishing a new table — the
   server doesn't pick up publication changes live.
 
-### 5. Tier 2 — computed KPIs + anomaly alerts 🟡 (partial)
+### 5. Tier 2 — computed KPIs + anomaly alerts ✅
 **Prompt (as sent):** Add a `kpi_definitions` table (team_id, name, formula,
 created_by) with a **safe expression evaluator** (restricted grammar, no eval);
 let editors define a KPI from the editor and add it as a "KPI widget" that
@@ -88,22 +88,26 @@ recalculates live; implement rolling mean/stddev anomaly detection (>2σ) with a
 visible badge/toast on the widget; add a bell-icon notification list of recent
 anomaly alerts.
 
-**What actually exists today:**
-- ✅ A `metric_kpis` **view** (latest / previous / avg / min / max / stddev) +
-  a live **KPI panel** showing value, Δ% and average per metric.
-- ✅ **Client-side** z-score anomaly detection over the visible window, surfaced
-  as red dots on charts + an "anomaly" badge on widgets/KPI cards; the simulator
-  injects spikes so it's demoable.
+**Implemented (completed in the final pass):**
+- ✅ `kpi_definitions` table + a **safe formula evaluator**
+  (`src/lib/kpi-formula.ts`) — a hand-written tokenizer + recursive-descent
+  parser over `+ - * /`, parens, numbers, and metric identifiers. No
+  `eval`/`Function`; unit-tested to reject code injection.
+- ✅ Define a KPI from the editor and add a **KPI widget** that evaluates the
+  formula against the latest metrics and recomputes via `metrics` Realtime
+  (seeded example: ARPU = `revenue / users`).
+- ✅ **Server-side** rolling-window detector: a Postgres trigger on `metrics`
+  computes mean/stddev over the last 20 readings and writes `anomaly_alerts` at
+  >2σ.
+- ✅ **Notification bell** listing recent alerts + a live **toast** on new ones;
+  plus the earlier client-side anomaly badges/dots on charts.
+- ✅ Also retained: the `metric_kpis` view + KPI panel from the initial Tier 2
+  pass.
 
-**What is NOT built yet (❌):**
-- `kpi_definitions` table + the safe formula evaluator (e.g. `revenue / users`).
-- User-defined **KPI widgets** that evaluate a formula and recompute via Realtime.
-- A **server-side** rolling-window detector persisting `anomaly_alerts`.
-- The **notification bell / toast** list.
-
-This prompt was re-issued near the end of the session; the remaining items above
-were scoped and started (tasks created) but **not completed**. So Tier 2's
-"KPIs & anomaly alerts" is **partial**.
+**Note:** this was built out of order — an initial Tier 2 pass shipped only the
+KPI *view/panel* + client-side anomaly dots; the `kpi_definitions` / evaluator /
+KPI-widget / server-detector / bell were completed later, in the final pass.
+Verified by `npm run verify:kpi`.
 
 ### 6. Tier 3 — projects, webhooks, audit logs, custom metrics 🟡 (mostly done)
 **Prompt (as sent):** Add a `projects` table between teams and dashboards/metrics
@@ -126,8 +130,10 @@ definitions selectable in the widget/KPI builders.
 
 **Deviations / gaps (🟡):**
 - Webhook delivery is a **Next.js server action** (`lib/webhooks.ts`), **not a
-  Supabase Edge Function**, and there is **no retry/backoff** — a failed delivery
-  is logged but not retried. This differs from the prompt.
+  Supabase Edge Function**. Retry **was added** in the final pass (3 attempts,
+  exponential backoff, no retry on 4xx; `attempts` logged), so the retry +
+  delivery-log parts of the spec are met — the Edge-Function transport is the
+  remaining deviation.
 - **Metrics are team-scoped, not project-scoped.** Memberships stayed team-scoped
   (the RLS unit), and a project's access == its team's access. This preserves
   Tier 1/2 isolation but is a deliberate simplification vs. "metrics belong to a
@@ -181,6 +187,13 @@ In the order they happened:
 7. Two bugs were found in my **own verification scripts** (not the app): the
    `memberships` table has no `id` column, and a Realtime subscribe/insert race
    in the collab test — both fixed.
+8. **Final pass** — a batch of queued prompts arrived together (complete Tier 2
+   KPIs/anomalies; "extend to Tier 3" which was already built; a submission pass;
+   and this doc). I flagged that the Tier 3 prompt duplicated finished work
+   (didn't re-run it), then completed the genuinely-missing pieces: the Tier 2
+   KPI/anomaly features (above), webhook retry, a dedicated isolation probe
+   (`verify:isolation`), loading/error/404 + empty states, this submission README
+   + `DEPLOY.md`, and a security grep (clean: no client-side service-role usage).
 
 ---
 
@@ -189,24 +202,28 @@ In the order they happened:
 **Tier 1 — ✅ fully working.** Org→Team hierarchy, roles, RLS isolation,
 dashboards, dnd-kit editor, Recharts widgets, persistence, simulator.
 
-**Tier 2 — 🟡 partial.**
+**Tier 2 — ✅ complete.**
 - Realtime collaboration (widgets + dashboards, presence, reconciliation): ✅.
-- KPIs: a computed `metric_kpis` view + live KPI panel ✅; **user-defined KPI
-  formulas / `kpi_definitions` / KPI widgets ❌**.
+- KPIs: `metric_kpis` view + live KPI panel ✅; **user-defined KPI formulas via a
+  safe evaluator + KPI widgets ✅**.
 - Anomaly detection: client-side z-score badges/dots ✅; **server-side rolling
-  detector, persisted `anomaly_alerts`, and notification bell ❌**.
+  detector + persisted `anomaly_alerts` + notification bell/toast ✅**.
 
 **Tier 3 — 🟡 mostly working.** Projects ✅, audit logs ✅, custom metric
-definitions ✅, webhooks ✅ **but via a server action, not an Edge Function, and
-with no retry**. Metrics are team-scoped, not project-scoped.
+definitions ✅, webhooks ✅ (HMAC, **retry + backoff**, delivery log, SSRF) **but
+via a server action, not an Edge Function**. Metrics are team-scoped, not
+project-scoped.
 
-**Cross-cutting:** RLS isolation verified end-to-end at the DB layer
-(`verify:rls`), realtime verified across two clients (`verify:collab`).
+**Cross-cutting:** verified end-to-end at the DB/realtime layer —
+`verify:isolation`, `verify:rls` (23 checks), `verify:collab`, `verify:kpi`.
+Loading/error/404 + empty states added. Security grep clean (no client-side
+service-role usage).
 
 **Not done / shortcuts (48-hour scope):**
-- Tier 2 KPI-formula + anomaly-alert/notification features (planned, not built).
-- Webhooks as an Edge Function + retry (built as a server action instead).
-- Systematic loading/error/empty states.
-- Vercel deployment config and a security grep pass.
+- Webhooks as a Supabase Edge Function (built as a server action + retry instead).
+- Metrics are team-scoped, not project-scoped.
+- Seed users are local-only (direct `auth.users` insert; hosted needs the Auth API).
 - No membership *invite* flow for non-existent users (add-by-email only resolves
   existing users).
+- Anomaly detector is a fixed rolling window (last 20, >2σ), not seasonal.
+- No automated component/E2E UI tests (data/realtime-layer scripts + manual pass).

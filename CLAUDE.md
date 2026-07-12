@@ -191,3 +191,17 @@ plan in `TESTING.md`.
 Note: table GRANTs for `authenticated`/`service_role` live in
 `supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns
 "permission denied" before RLS runs. Default privileges cover future tables.
+
+**Final pass (Tier 2 completion + submission prep).**
+- Tier 2 now complete: `kpi_definitions` + safe evaluator (`lib/kpi-formula.ts`,
+  no eval), KPI widgets recomputing via `metrics` Realtime, a rolling-window
+  anomaly trigger writing `anomaly_alerts`, and a notification bell + toasts.
+- Webhooks gained retry + backoff (`webhook_deliveries.attempts`); still a server
+  action, not an Edge Function.
+- Submission: `README.md` (tier breakdown), `PROMPTS.md` (honest session log),
+  `DEPLOY.md` (Vercel + Supabase settings), loading/error/404 + empty states.
+- Verification scripts: `verify:isolation`, `verify:rls`, `verify:collab`,
+  `verify:kpi` — all green against the live local stack.
+- Anomaly stats: rolling window of the last **20** readings per (team, metric),
+  population stddev, z = |x − mean| / stddev, flagged at **> 2σ**, min 8 samples,
+  evaluated on **every insert** (the detector trigger).
