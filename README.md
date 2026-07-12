@@ -1,5 +1,8 @@
 # Multi-Tenant Analytics Dashboard
 
+**🔗 Live demo: https://multi-tenant-analytics-dashboard.vercel.app**
+Log in with a seeded user below (e.g. `alice@example.com` / `password123`).
+
 A hierarchical, multi-tenant analytics platform with real-time collaboration.
 Organizations contain teams; teams contain projects; projects contain dashboards
 built from live metrics. Access is isolated per tenant and enforced at the
