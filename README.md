@@ -119,7 +119,29 @@ explanation in the task notes / `CLAUDE.md`.
 
 | Command            | Description                                        |
 | ------------------ | -------------------------------------------------- |
-| `npm run dev`      | Next.js dev server                                 |
-| `npm run build`    | Production build                                   |
-| `npm run simulate` | Insert live demo metrics for every team            |
-| `npm run lint`     | ESLint                                             |
+| `npm run dev`           | Next.js dev server                                     |
+| `npm run build`         | Production build                                       |
+| `npm run simulate`      | Insert live demo metrics for every team                |
+| `npm run verify:rls`    | Assert RLS guarantees with the 3 seeded users          |
+| `npm run verify:collab` | Assert realtime collaboration across two clients       |
+| `npm run lint`          | ESLint                                                 |
+
+## Verification
+
+Two committed suites exercise the security and realtime behavior against the
+running local stack (no mocks):
+
+- `npm run verify:rls` — signs in as Alice/Bob/Carol and asserts tenant
+  isolation, role-based writes, admin-only membership/webhook/audit surfaces,
+  custom-metric rules, and the metric validation trigger (23 checks).
+- `npm run verify:collab` — two concurrent authenticated clients; asserts widget
+  add/move/remove and dashboard rename propagate (~<1s) and Presence sees both.
+
+See `TESTING.md` for the manual two-browser plan.
+
+## Team administration (admins)
+
+From a team page, admins get **Members** (add by email, change role, remove —
+RLS-enforced, audit-logged), **Webhooks**, and **Audit**; editors get **Metrics**.
+Webhook URLs are validated against SSRF (loopback/private/link-local blocked;
+set `WEBHOOK_ALLOW_LOCAL=true` to allow local targets in dev).

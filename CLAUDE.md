@@ -177,6 +177,17 @@ concurrent authenticated clients via `npm run verify:collab` (INSERT/UPDATE/
 DELETE + rename propagate in ~200–550ms; Presence sees both). Manual + automated
 plan in `TESTING.md`.
 
+**Loose ends closed (post-collaboration).**
+- **Membership management UI** — `/org/[teamId]/members` (admin): add by email
+  (service-role email→id lookup), change role, remove; self-lockout guards;
+  RLS-enforced and audit-logged.
+- **SSRF guard** — `lib/url-safety.ts isSafeWebhookUrl` blocks non-http(s) and
+  loopback/private/link-local/metadata targets, enforced at webhook creation and
+  again at dispatch. `WEBHOOK_ALLOW_LOCAL=true` permits local targets in dev.
+- **Committed RLS test suite** — `npm run verify:rls` (`scripts/verify-rls.ts`),
+  23 assertions covering isolation, role writes, admin-only surfaces, custom
+  metric rules, and the validation trigger.
+
 Note: table GRANTs for `authenticated`/`service_role` live in
 `supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns
 "permission denied" before RLS runs. Default privileges cover future tables.
