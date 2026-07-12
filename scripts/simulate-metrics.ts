@@ -43,11 +43,24 @@ const METRICS: Record<string, [number, number, boolean]> = {
 // Per team+metric running value for a smooth random walk.
 const state = new Map<string, number>();
 
+// Roughly 1 in 15 points is a spike, so anomaly detection has something to catch
+// within a minute or two of running.
+const SPIKE_CHANCE = 0.07;
+
 function nextValue(key: string, [min, max, isInt]: [number, number, boolean]) {
   const prev = state.get(key) ?? min + Math.random() * (max - min);
   const span = max - min;
+
+  let v: number;
+  if (Math.random() < SPIKE_CHANCE) {
+    // Sudden spike or dip well outside the normal band (an anomaly), but don't
+    // persist it as the new baseline so the series returns to normal after.
+    v = Math.random() < 0.5 ? max + span * 0.6 : Math.max(0, min - span * 0.3);
+    return isInt ? Math.round(v) : Math.round(v * 100) / 100;
+  }
+
   const step = (Math.random() - 0.5) * span * 0.08; // +/- 4% of range
-  let v = prev + step;
+  v = prev + step;
   if (v < min) v = min + Math.random() * span * 0.1;
   if (v > max) v = max - Math.random() * span * 0.1;
   state.set(key, v);
