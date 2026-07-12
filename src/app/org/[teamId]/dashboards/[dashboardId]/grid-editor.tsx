@@ -12,6 +12,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, X } from "lucide-react";
 
+import { createClient } from "@/lib/supabase/client";
 import {
   METRIC_NAMES,
   WIDGET_TYPES,
@@ -52,6 +53,12 @@ export function GridEditor({
   const [colWidth, setColWidth] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const persistTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Widget the local user is actively dragging/resizing — ignore remote updates
+  // for it so a collaborator's echo doesn't yank it out from under the pointer.
+  const activeIdRef = useRef<string | null>(null);
+  const setActive = useCallback((id: string | null) => {
+    activeIdRef.current = id;
+  }, []);
 
   // Measure a single column's width so pixel drags map to grid units.
   useEffect(() => {
@@ -66,6 +73,46 @@ export function GridEditor({
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Realtime co-editing: apply widget inserts/updates/deletes from collaborators.
+  // RLS on `widgets` means we only receive changes for dashboards we can see.
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel(`widgets:${dashboardId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "widgets",
+          filter: `dashboard_id=eq.${dashboardId}`,
+        },
+        (payload) => {
+          setWidgets((prev) => {
+            if (payload.eventType === "INSERT") {
+              const w = payload.new as Widget;
+              return prev.some((x) => x.id === w.id)
+                ? prev.map((x) => (x.id === w.id ? w : x))
+                : [...prev, w];
+            }
+            if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string }).id;
+              return prev.filter((x) => x.id !== oldId);
+            }
+            // UPDATE
+            const w = payload.new as Widget;
+            if (activeIdRef.current === w.id) return prev;
+            return prev.map((x) => (x.id === w.id ? w : x));
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [dashboardId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -95,6 +142,7 @@ export function GridEditor({
   );
 
   function onDragEnd(event: DragEndEvent) {
+    activeIdRef.current = null;
     if (!canEdit || colStep <= 0) return;
     const id = String(event.active.id);
     const w = widgets.find((x) => x.id === id);
@@ -154,7 +202,13 @@ export function GridEditor({
     <div className="space-y-4">
       {canEdit && <AddWidgetBar onAdd={onAdd} />}
 
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <DndContext
+        sensors={sensors}
+        onDragStart={(e) => {
+          activeIdRef.current = String(e.active.id);
+        }}
+        onDragEnd={onDragEnd}
+      >
         <div
           ref={containerRef}
           className="relative grid w-full"
@@ -182,6 +236,7 @@ export function GridEditor({
               onResize={resize}
               onRemove={onRemove}
               onChangeMetric={onChangeMetric}
+              setActive={setActive}
             />
           ))}
         </div>
@@ -199,6 +254,7 @@ function WidgetTile({
   onResize,
   onRemove,
   onChangeMetric,
+  setActive,
 }: {
   widget: Widget;
   teamId: string;
@@ -208,6 +264,7 @@ function WidgetTile({
   onResize: (id: string, w: number, h: number) => void;
   onRemove: (id: string) => void;
   onChangeMetric: (id: string, metric: MetricName) => void;
+  setActive: (id: string | null) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: widget.id, disabled: !canEdit });
@@ -222,12 +279,14 @@ function WidgetTile({
     const startY = e.clientY;
     const startW = p.w;
     const startH = p.h;
+    setActive(widget.id);
     function move(ev: PointerEvent) {
       const dCols = Math.round((ev.clientX - startX) / colStep);
       const dRows = Math.round((ev.clientY - startY) / rowStep);
       onResize(widget.id, startW + dCols, startH + dRows);
     }
     function up() {
+      setActive(null);
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
     }
