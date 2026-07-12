@@ -110,5 +110,24 @@ Implement in order. Each tier builds on the previous.
 
 ## Status
 
-Project foundation scaffolded (Next.js + Tailwind + shadcn/ui + Supabase helpers).
-No features implemented yet — start with Tier 1.
+**Tier 1 complete.** Implemented:
+
+- Auth (email/password via Supabase) with login page and route protection.
+- `/org` team list, `/org/[teamId]` dashboard list with role-gated
+  "New Dashboard", `/org/[teamId]/dashboards/[dashboardId]` editor.
+- dnd-kit grid editor: add / move / resize / remove widgets; widget
+  position/size debounced-persisted to `widgets.position`.
+- Widget types line_chart / bar_chart / stat via Recharts, reading `metrics`
+  by team_id + metric_name, live-polling.
+- Role gating in UI (viewers get no edit controls) backed by RLS on all writes.
+- `scripts/simulate-metrics.ts` (`npm run simulate`) streams demo metrics.
+
+Verified end-to-end against a live local Supabase: SELECT isolation
+(Finance/Marketing disjoint), and write enforcement (viewer 403, editor 201,
+cross-team 403) through real Auth + PostgREST + RLS.
+
+Next: **Tier 2** (realtime co-editing, KPI calcs, anomaly detection).
+
+Note: table GRANTs for `authenticated`/`service_role` live in
+`supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns
+"permission denied" before RLS runs. Default privileges cover future tables.
