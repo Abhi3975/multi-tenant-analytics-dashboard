@@ -167,6 +167,16 @@ delivery log.
 
 All three tiers complete.
 
+**Collaboration hardening (post-Tier 3).** Realtime now also covers the
+`dashboards` table (rename syncs live via an inline-editable `DashboardTitle`).
+The grid editor's reconciliation was tightened: it records a signature of each
+locally-written widget value and ignores its own Realtime echoes (no flicker),
+never overwrites the widget under active drag/resize, and applies genuinely
+different remote values as last-write-wins (converges). Verified with two
+concurrent authenticated clients via `npm run verify:collab` (INSERT/UPDATE/
+DELETE + rename propagate in ~200–550ms; Presence sees both). Manual + automated
+plan in `TESTING.md`.
+
 Note: table GRANTs for `authenticated`/`service_role` live in
 `supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns
 "permission denied" before RLS runs. Default privileges cover future tables.
