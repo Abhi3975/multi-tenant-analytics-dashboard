@@ -37,6 +37,16 @@ export default async function DashboardPage({
     .eq("dashboard_id", dashboardId)
     .order("created_at", { ascending: true });
 
+  // Built-in (global) metrics + this team's custom definitions.
+  const { data: defs } = await supabase
+    .from("metric_definitions")
+    .select("key, label, is_builtin, team_id")
+    .or(`team_id.is.null,team_id.eq.${teamId}`);
+
+  const availableMetrics = (defs ?? [])
+    .sort((a, b) => Number(b.is_builtin) - Number(a.is_builtin))
+    .map((d) => ({ key: d.key as string, label: d.label as string }));
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-2">
@@ -81,6 +91,7 @@ export default async function DashboardPage({
         teamId={teamId}
         canEdit={writable}
         initialWidgets={(widgets ?? []) as Widget[]}
+        availableMetrics={availableMetrics}
       />
     </div>
   );

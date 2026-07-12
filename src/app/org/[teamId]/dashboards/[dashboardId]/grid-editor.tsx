@@ -14,13 +14,17 @@ import { GripVertical, Plus, X } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/client";
 import {
-  METRIC_NAMES,
   WIDGET_TYPES,
   type MetricName,
   type Widget,
   type WidgetPosition,
   type WidgetType,
 } from "@/lib/types";
+
+export interface MetricOption {
+  key: string;
+  label: string;
+}
 import { Button } from "@/components/ui/button";
 import { WidgetView } from "@/components/dashboard/widget-view";
 import {
@@ -43,11 +47,13 @@ export function GridEditor({
   teamId,
   canEdit,
   initialWidgets,
+  availableMetrics,
 }: {
   dashboardId: string;
   teamId: string;
   canEdit: boolean;
   initialWidgets: Widget[];
+  availableMetrics: MetricOption[];
 }) {
   const [widgets, setWidgets] = useState<Widget[]>(initialWidgets);
   const [colWidth, setColWidth] = useState(0);
@@ -200,7 +206,9 @@ export function GridEditor({
 
   return (
     <div className="space-y-4">
-      {canEdit && <AddWidgetBar onAdd={onAdd} />}
+      {canEdit && (
+        <AddWidgetBar onAdd={onAdd} availableMetrics={availableMetrics} />
+      )}
 
       <DndContext
         sensors={sensors}
@@ -237,6 +245,7 @@ export function GridEditor({
               onRemove={onRemove}
               onChangeMetric={onChangeMetric}
               setActive={setActive}
+              availableMetrics={availableMetrics}
             />
           ))}
         </div>
@@ -255,6 +264,7 @@ function WidgetTile({
   onRemove,
   onChangeMetric,
   setActive,
+  availableMetrics,
 }: {
   widget: Widget;
   teamId: string;
@@ -265,6 +275,7 @@ function WidgetTile({
   onRemove: (id: string) => void;
   onChangeMetric: (id: string, metric: MetricName) => void;
   setActive: (id: string | null) => void;
+  availableMetrics: MetricOption[];
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } =
     useDraggable({ id: widget.id, disabled: !canEdit });
@@ -332,9 +343,9 @@ function WidgetTile({
               className="rounded border bg-transparent px-1 py-0.5 text-xs"
               aria-label="Metric"
             >
-              {METRIC_NAMES.map((m) => (
-                <option key={m} value={m}>
-                  {m.replace("_", " ")}
+              {availableMetrics.map((m) => (
+                <option key={m.key} value={m.key}>
+                  {m.label}
                 </option>
               ))}
             </select>
@@ -374,11 +385,15 @@ function WidgetTile({
 
 function AddWidgetBar({
   onAdd,
+  availableMetrics,
 }: {
   onAdd: (type: WidgetType, metric: MetricName) => void;
+  availableMetrics: MetricOption[];
 }) {
   const [type, setType] = useState<WidgetType>("line_chart");
-  const [metric, setMetric] = useState<MetricName>("revenue");
+  const [metric, setMetric] = useState<MetricName>(
+    availableMetrics[0]?.key ?? "revenue"
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-2">
@@ -403,9 +418,9 @@ function AddWidgetBar({
         className="h-8 rounded-md border bg-background px-2 text-sm capitalize"
         aria-label="Metric"
       >
-        {METRIC_NAMES.map((m) => (
-          <option key={m} value={m}>
-            {m.replace("_", " ")}
+        {availableMetrics.map((m) => (
+          <option key={m.key} value={m.key}>
+            {m.label}
           </option>
         ))}
       </select>
