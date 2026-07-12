@@ -83,9 +83,20 @@ insert into public.memberships (user_id, team_id, role) values
   ('c0000000-0000-0000-0000-0000000000b2', 'b0000000-0000-0000-0000-000000000001', 'editor'),  -- bob:   Finance editor
   ('c0000000-0000-0000-0000-0000000000c3', 'b0000000-0000-0000-0000-000000000002', 'viewer');  -- carol: Marketing viewer
 
+-- --- Projects (Tier 3: Team -> Project -> Dashboard) ---------------------------
+insert into public.projects (id, team_id, name) values
+  ('e0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'General'),  -- Finance
+  ('e0000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'Growth'),   -- Finance
+  ('e0000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'General');  -- Marketing
+
+-- --- Custom metric definition (Tier 3) -----------------------------------------
+insert into public.metric_definitions (team_id, key, label, unit, is_builtin) values
+  ('b0000000-0000-0000-0000-000000000001', 'signups', 'Signups', null, false);  -- Finance custom
+
 -- --- Sample dashboard + widget for Finance -------------------------------------
-insert into public.dashboards (id, team_id, name, layout, created_by) values
+insert into public.dashboards (id, team_id, project_id, name, layout, created_by) values
   ('d0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001',
+   'e0000000-0000-0000-0000-000000000001',
    'Finance Overview', '{"columns":12}'::jsonb, 'c0000000-0000-0000-0000-0000000000a1');
 
 insert into public.widgets (dashboard_id, type, config, position) values
@@ -101,6 +112,8 @@ insert into public.metrics (team_id, metric_name, value, recorded_at) values
   ('b0000000-0000-0000-0000-000000000001', 'errors',        12, now() - interval '1 day'),
   ('b0000000-0000-0000-0000-000000000001', 'page_views',  4300, now() - interval '1 day'),
   ('b0000000-0000-0000-0000-000000000001', 'clicks',        890, now() - interval '1 day'),
+  ('b0000000-0000-0000-0000-000000000001', 'signups',        42, now() - interval '2 days'),
+  ('b0000000-0000-0000-0000-000000000001', 'signups',        57, now() - interval '1 day'),
   -- Marketing
   ('b0000000-0000-0000-0000-000000000002', 'revenue',     8000, now() - interval '2 days'),
   ('b0000000-0000-0000-0000-000000000002', 'revenue',     9200, now() - interval '1 day'),
