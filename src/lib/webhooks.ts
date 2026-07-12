@@ -7,6 +7,9 @@ import { isSafeWebhookUrl } from "@/lib/url-safety";
 import type { Webhook } from "@/lib/types";
 
 const DELIVERY_TIMEOUT_MS = 5000;
+const MAX_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Deliver an event to every active webhook subscribed to it for a team.
@@ -50,6 +53,7 @@ export async function dispatchWebhook(
         let status: number | null = null;
         let ok = false;
         let error: string | null = null;
+        let attempts = 0;
 
         // Re-check at send time (SSRF defense-in-depth; the URL was also
         // validated at creation).
@@ -63,25 +67,34 @@ export async function dispatchWebhook(
             status_code: null,
             ok: false,
             error: `blocked: ${safe.reason}`,
+            attempts: 0,
           });
           return;
         }
 
-        try {
-          const res = await fetch(hook.url, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Webhook-Event": event,
-              "X-Webhook-Signature": `sha256=${signature}`,
-            },
-            body,
-            signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
-          });
-          status = res.status;
-          ok = res.ok;
-        } catch (e) {
-          error = e instanceof Error ? e.message : String(e);
+        // Retry with exponential backoff on network errors / 5xx. 4xx is a
+        // client error and is not retried.
+        while (attempts < MAX_ATTEMPTS) {
+          attempts++;
+          try {
+            const res = await fetch(hook.url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Webhook-Event": event,
+                "X-Webhook-Signature": `sha256=${signature}`,
+              },
+              body,
+              signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+            });
+            status = res.status;
+            ok = res.ok;
+            error = ok ? null : `HTTP ${status}`;
+            if (ok || status < 500) break; // success or non-retryable
+          } catch (e) {
+            error = e instanceof Error ? e.message : String(e);
+          }
+          if (attempts < MAX_ATTEMPTS) await sleep(300 * 2 ** (attempts - 1));
         }
 
         await admin.from("webhook_deliveries").insert({
@@ -92,6 +105,7 @@ export async function dispatchWebhook(
           status_code: status,
           ok,
           error,
+          attempts,
         });
       })
     );

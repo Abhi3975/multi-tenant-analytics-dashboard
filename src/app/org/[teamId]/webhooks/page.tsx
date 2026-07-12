@@ -126,7 +126,8 @@ export default async function WebhooksPage({
                 <code className="text-xs">{d.event}</code>
               </div>
               <span className="text-xs text-muted-foreground">
-                {d.status_code ?? d.error ?? "—"} ·{" "}
+                {d.status_code ?? d.error ?? "—"}
+                {d.attempts > 1 ? ` · ${d.attempts} tries` : ""} ·{" "}
                 {new Date(d.created_at).toLocaleTimeString()}
               </span>
             </div>
