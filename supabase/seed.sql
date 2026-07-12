@@ -119,4 +119,19 @@ insert into public.metrics (team_id, metric_name, value, recorded_at) values
   ('b0000000-0000-0000-0000-000000000002', 'revenue',     9200, now() - interval '1 day'),
   ('b0000000-0000-0000-0000-000000000002', 'errors',         5, now() - interval '1 day'),
   ('b0000000-0000-0000-0000-000000000002', 'page_views', 15200, now() - interval '1 day'),
-  ('b0000000-0000-0000-0000-000000000002', 'clicks',       2100, now() - interval '1 day');
+  ('b0000000-0000-0000-0000-000000000002', 'clicks',       2100, now() - interval '1 day'),
+  -- users (built-in; enables the ARPU = revenue / users KPI)
+  ('b0000000-0000-0000-0000-000000000001', 'users',        2400, now() - interval '2 days'),
+  ('b0000000-0000-0000-0000-000000000001', 'users',        2550, now() - interval '1 day'),
+  ('b0000000-0000-0000-0000-000000000002', 'users',        9100, now() - interval '2 days'),
+  ('b0000000-0000-0000-0000-000000000002', 'users',        9600, now() - interval '1 day');
+
+-- --- KPI definition + KPI widget (Tier 2) --------------------------------------
+insert into public.kpi_definitions (id, team_id, name, formula, created_by) values
+  ('f0000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001',
+   'ARPU', 'revenue / users', 'c0000000-0000-0000-0000-0000000000a1');
+
+insert into public.widgets (dashboard_id, type, config, position) values
+  ('d0000000-0000-0000-0000-000000000001', 'kpi',
+   '{"kpiDefinitionId":"f0000000-0000-0000-0000-000000000001","title":"ARPU"}'::jsonb,
+   '{"x":6,"y":0,"w":3,"h":2}'::jsonb);
