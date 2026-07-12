@@ -25,6 +25,17 @@ export interface MetricOption {
   key: string;
   label: string;
 }
+
+// Order-independent signature of a widget's placement + config, used to detect
+// our own Realtime echoes so applying them can't cause a visual flicker.
+function sigOf(
+  position: Partial<WidgetPosition> | undefined,
+  config: { metric?: string; title?: string } | undefined
+): string {
+  const p = position ?? {};
+  const c = config ?? {};
+  return `${p.x},${p.y},${p.w},${p.h}|${c.metric ?? ""}|${c.title ?? ""}`;
+}
 import { Button } from "@/components/ui/button";
 import { WidgetView } from "@/components/dashboard/widget-view";
 import {
@@ -65,6 +76,10 @@ export function GridEditor({
   const setActive = useCallback((id: string | null) => {
     activeIdRef.current = id;
   }, []);
+  // Signatures of values we've written locally. When a Realtime UPDATE carries a
+  // value we just produced, it's our own echo — skip it (state already matches)
+  // instead of re-setting it and risking a flicker.
+  const pendingEchoes = useRef<Map<string, string>>(new Map());
 
   // Measure a single column's width so pixel drags map to grid units.
   useEffect(() => {
@@ -108,7 +123,15 @@ export function GridEditor({
             }
             // UPDATE
             const w = payload.new as Widget;
+            // Never yank a widget the local user is currently manipulating.
             if (activeIdRef.current === w.id) return prev;
+            // Our own echo? Local state already matches — don't re-apply.
+            const incoming = sigOf(w.position, w.config);
+            if (pendingEchoes.current.get(w.id) === incoming) {
+              pendingEchoes.current.delete(w.id);
+              return prev;
+            }
+            // A genuine remote change wins (last-write-wins) and converges.
             return prev.map((x) => (x.id === w.id ? w : x));
           });
         }
@@ -140,7 +163,11 @@ export function GridEditor({
   const setPosition = useCallback(
     (id: string, next: WidgetPosition) => {
       setWidgets((prev) =>
-        prev.map((w) => (w.id === id ? { ...w, position: next } : w))
+        prev.map((w) => {
+          if (w.id !== id) return w;
+          pendingEchoes.current.set(id, sigOf(next, w.config));
+          return { ...w, position: next };
+        })
       );
       persistPosition(id, next);
     },
@@ -196,12 +223,14 @@ export function GridEditor({
   }
 
   async function onChangeMetric(id: string, metric: MetricName) {
+    const w = widgets.find((x) => x.id === id);
+    if (!w) return;
+    const config = { ...w.config, metric };
+    pendingEchoes.current.set(id, sigOf(w.position, config));
     setWidgets((prev) =>
-      prev.map((w) =>
-        w.id === id ? { ...w, config: { ...w.config, metric } } : w
-      )
+      prev.map((x) => (x.id === id ? { ...x, config } : x))
     );
-    await updateWidgetConfig(id, { metric }).catch((e) => console.error(e));
+    await updateWidgetConfig(id, config).catch((e) => console.error(e));
   }
 
   return (
