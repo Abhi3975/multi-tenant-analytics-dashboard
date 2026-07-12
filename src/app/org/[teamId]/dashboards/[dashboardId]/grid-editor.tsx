@@ -12,11 +12,14 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, Plus, X } from "lucide-react";
 
+import { useRouter } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/client";
 import {
   WIDGET_TYPES,
   type MetricName,
   type Widget,
+  type WidgetConfig,
   type WidgetPosition,
   type WidgetType,
 } from "@/lib/types";
@@ -24,6 +27,11 @@ import {
 export interface MetricOption {
   key: string;
   label: string;
+}
+
+export interface KpiOption {
+  id: string;
+  name: string;
 }
 
 // Order-independent signature of a widget's placement + config, used to detect
@@ -40,6 +48,7 @@ import { Button } from "@/components/ui/button";
 import { WidgetView } from "@/components/dashboard/widget-view";
 import {
   addWidget,
+  createKpiDefinition,
   removeWidget,
   updateWidgetConfig,
   updateWidgetPosition,
@@ -59,13 +68,16 @@ export function GridEditor({
   canEdit,
   initialWidgets,
   availableMetrics,
+  availableKpis,
 }: {
   dashboardId: string;
   teamId: string;
   canEdit: boolean;
   initialWidgets: Widget[];
   availableMetrics: MetricOption[];
+  availableKpis: KpiOption[];
 }) {
+  const router = useRouter();
   const [widgets, setWidgets] = useState<Widget[]>(initialWidgets);
   const [colWidth, setColWidth] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -202,19 +214,37 @@ export function GridEditor({
     });
   }
 
-  async function onAdd(type: WidgetType, metric: MetricName) {
+  function nextPosition(type: WidgetType): WidgetPosition {
     const maxY = widgets.reduce(
       (m, w) => Math.max(m, w.position.y + w.position.h),
       0
     );
-    const position: WidgetPosition = {
-      x: 0,
-      y: maxY,
-      w: type === "stat" ? 3 : 6,
-      h: type === "stat" ? 2 : 3,
-    };
-    const created = await addWidget({ dashboardId, type, metric, position });
+    const small = type === "stat" || type === "kpi";
+    return { x: 0, y: maxY, w: small ? 3 : 6, h: small ? 2 : 3 };
+  }
+
+  async function addAt(type: WidgetType, config: WidgetConfig) {
+    const created = await addWidget({
+      dashboardId,
+      type,
+      config,
+      position: nextPosition(type),
+    });
     setWidgets((prev) => [...prev, created]);
+  }
+
+  async function onAddMetric(type: WidgetType, metric: MetricName) {
+    await addAt(type, { metric });
+  }
+
+  async function onAddKpi(kpiDefinitionId: string, name: string) {
+    await addAt("kpi", { kpiDefinitionId, title: name });
+  }
+
+  async function onCreateAndAddKpi(name: string, formula: string) {
+    const def = await createKpiDefinition({ teamId, name, formula });
+    await onAddKpi(def.id, def.name);
+    router.refresh(); // surface the new KPI in the picker
   }
 
   async function onRemove(id: string) {
@@ -236,7 +266,13 @@ export function GridEditor({
   return (
     <div className="space-y-4">
       {canEdit && (
-        <AddWidgetBar onAdd={onAdd} availableMetrics={availableMetrics} />
+        <AddWidgetBar
+          onAddMetric={onAddMetric}
+          onAddKpi={onAddKpi}
+          onCreateAndAddKpi={onCreateAndAddKpi}
+          availableMetrics={availableMetrics}
+          availableKpis={availableKpis}
+        />
       )}
 
       <DndContext
@@ -334,7 +370,10 @@ function WidgetTile({
     window.addEventListener("pointerup", up);
   }
 
-  const title = widget.config.title ?? widget.config.metric.replace("_", " ");
+  const isKpi = widget.type === "kpi";
+  const title =
+    widget.config.title ??
+    (isKpi ? "KPI" : (widget.config.metric ?? "").replace("_", " "));
 
   return (
     <div
@@ -364,20 +403,22 @@ function WidgetTile({
         </span>
         {canEdit ? (
           <>
-            <select
-              value={widget.config.metric}
-              onChange={(e) =>
-                onChangeMetric(widget.id, e.target.value as MetricName)
-              }
-              className="rounded border bg-transparent px-1 py-0.5 text-xs"
-              aria-label="Metric"
-            >
-              {availableMetrics.map((m) => (
-                <option key={m.key} value={m.key}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
+            {!isKpi && (
+              <select
+                value={widget.config.metric}
+                onChange={(e) =>
+                  onChangeMetric(widget.id, e.target.value as MetricName)
+                }
+                className="rounded border bg-transparent px-1 py-0.5 text-xs"
+                aria-label="Metric"
+              >
+                {availableMetrics.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               onClick={() => onRemove(widget.id)}
               className="text-muted-foreground hover:text-destructive"
@@ -413,49 +454,130 @@ function WidgetTile({
 }
 
 function AddWidgetBar({
-  onAdd,
+  onAddMetric,
+  onAddKpi,
+  onCreateAndAddKpi,
   availableMetrics,
+  availableKpis,
 }: {
-  onAdd: (type: WidgetType, metric: MetricName) => void;
+  onAddMetric: (type: WidgetType, metric: MetricName) => void;
+  onAddKpi: (kpiDefinitionId: string, name: string) => void;
+  onCreateAndAddKpi: (name: string, formula: string) => void;
   availableMetrics: MetricOption[];
+  availableKpis: KpiOption[];
 }) {
   const [type, setType] = useState<WidgetType>("line_chart");
   const [metric, setMetric] = useState<MetricName>(
     availableMetrics[0]?.key ?? "revenue"
   );
+  const [kpiId, setKpiId] = useState<string>(availableKpis[0]?.id ?? "__new__");
+  const [kpiName, setKpiName] = useState("");
+  const [kpiFormula, setKpiFormula] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isKpi = type === "kpi";
+  const creatingNew = kpiId === "__new__";
+
+  async function onAdd() {
+    setError(null);
+    if (!isKpi) {
+      onAddMetric(type, metric);
+      return;
+    }
+    setBusy(true);
+    try {
+      if (creatingNew) {
+        await onCreateAndAddKpi(kpiName, kpiFormula);
+        setKpiName("");
+        setKpiFormula("");
+      } else {
+        const k = availableKpis.find((x) => x.id === kpiId);
+        if (k) onAddKpi(k.id, k.name);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-2">
-      <span className="px-1 text-xs font-medium text-muted-foreground">
-        Add widget
-      </span>
-      <select
-        value={type}
-        onChange={(e) => setType(e.target.value as WidgetType)}
-        className="h-8 rounded-md border bg-background px-2 text-sm"
-        aria-label="Widget type"
-      >
-        {WIDGET_TYPES.map((t) => (
-          <option key={t.value} value={t.value}>
-            {t.label}
-          </option>
-        ))}
-      </select>
-      <select
-        value={metric}
-        onChange={(e) => setMetric(e.target.value as MetricName)}
-        className="h-8 rounded-md border bg-background px-2 text-sm capitalize"
-        aria-label="Metric"
-      >
-        {availableMetrics.map((m) => (
-          <option key={m.key} value={m.key}>
-            {m.label}
-          </option>
-        ))}
-      </select>
-      <Button size="sm" onClick={() => onAdd(type, metric)}>
-        <Plus className="mr-1" /> Add
-      </Button>
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="px-1 text-xs font-medium text-muted-foreground">
+          Add widget
+        </span>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value as WidgetType)}
+          className="h-8 rounded-md border bg-background px-2 text-sm"
+          aria-label="Widget type"
+        >
+          {WIDGET_TYPES.map((t) => (
+            <option key={t.value} value={t.value}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+
+        {!isKpi && (
+          <select
+            value={metric}
+            onChange={(e) => setMetric(e.target.value as MetricName)}
+            className="h-8 rounded-md border bg-background px-2 text-sm capitalize"
+            aria-label="Metric"
+          >
+            {availableMetrics.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {isKpi && (
+          <select
+            value={kpiId}
+            onChange={(e) => setKpiId(e.target.value)}
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            aria-label="KPI"
+          >
+            {availableKpis.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name}
+              </option>
+            ))}
+            <option value="__new__">＋ New KPI…</option>
+          </select>
+        )}
+
+        <Button size="sm" onClick={onAdd} disabled={busy}>
+          <Plus className="mr-1" /> Add
+        </Button>
+      </div>
+
+      {isKpi && creatingNew && (
+        <div className="flex flex-wrap items-center gap-2 pl-1">
+          <input
+            value={kpiName}
+            onChange={(e) => setKpiName(e.target.value)}
+            placeholder="Name (e.g. ARPU)"
+            className="h-8 w-40 rounded-md border bg-background px-2 text-sm"
+          />
+          <input
+            value={kpiFormula}
+            onChange={(e) => setKpiFormula(e.target.value)}
+            placeholder="Formula (e.g. revenue / users)"
+            className="h-8 w-64 rounded-md border bg-background px-2 font-mono text-sm"
+          />
+          <span className="text-[11px] text-muted-foreground">
+            metrics, + − × ÷, ( )
+          </span>
+        </div>
+      )}
+
+      {error && <p className="pl-1 text-xs text-destructive">{error}</p>}
     </div>
   );
 }

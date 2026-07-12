@@ -7,6 +7,7 @@ import { canWrite, type Widget } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { KpiPanel } from "@/components/dashboard/kpi-panel";
 import { PresenceBar } from "@/components/dashboard/presence-bar";
+import { NotificationBell } from "@/components/dashboard/notification-bell";
 import { GridEditor } from "./grid-editor";
 import { DashboardTitle } from "./dashboard-title";
 
@@ -48,6 +49,16 @@ export default async function DashboardPage({
     .sort((a, b) => Number(b.is_builtin) - Number(a.is_builtin))
     .map((d) => ({ key: d.key as string, label: d.label as string }));
 
+  const { data: kpis } = await supabase
+    .from("kpi_definitions")
+    .select("id, name")
+    .eq("team_id", teamId)
+    .order("name");
+  const availableKpis = (kpis ?? []).map((k) => ({
+    id: k.id as string,
+    name: k.name as string,
+  }));
+
   return (
     <div className="mx-auto max-w-6xl p-6">
       <div className="mb-2">
@@ -72,13 +83,14 @@ export default async function DashboardPage({
             View only — editing is disabled for your role.
           </span>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-3">
           <PresenceBar
             dashboardId={dashboardId}
             email={user.email ?? user.id}
             role={role}
             canEdit={writable}
           />
+          <NotificationBell teamId={teamId} />
         </div>
       </header>
 
@@ -95,6 +107,7 @@ export default async function DashboardPage({
         canEdit={writable}
         initialWidgets={(widgets ?? []) as Widget[]}
         availableMetrics={availableMetrics}
+        availableKpis={availableKpis}
       />
     </div>
   );

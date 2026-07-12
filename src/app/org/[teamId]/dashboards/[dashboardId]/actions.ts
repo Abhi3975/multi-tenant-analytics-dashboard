@@ -4,8 +4,10 @@ import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { recordAudit } from "@/lib/audit";
 import { dispatchWebhook } from "@/lib/webhooks";
+import { parseFormula } from "@/lib/kpi-formula";
+import { BUILTIN_METRICS } from "@/lib/types";
 import type {
-  MetricName,
+  KpiDefinition,
   Widget,
   WidgetConfig,
   WidgetPosition,
@@ -32,7 +34,7 @@ async function teamForDashboard(dashboardId: string): Promise<string | null> {
 export async function addWidget(input: {
   dashboardId: string;
   type: WidgetType;
-  metric: MetricName;
+  config: WidgetConfig;
   position: WidgetPosition;
 }): Promise<Widget> {
   const supabase = createClient();
@@ -41,7 +43,7 @@ export async function addWidget(input: {
     .insert({
       dashboard_id: input.dashboardId,
       type: input.type,
-      config: { metric: input.metric } satisfies WidgetConfig,
+      config: input.config,
       position: input.position,
     })
     .select("*")
@@ -60,17 +62,78 @@ export async function addWidget(input: {
       action: "widget.added",
       entityType: "widget",
       entityId: widget.id,
-      metadata: { dashboard_id: input.dashboardId, type: input.type, metric: input.metric },
+      metadata: { dashboard_id: input.dashboardId, type: input.type, config: input.config },
     });
     await dispatchWebhook(teamId, "widget.added", {
       widget_id: widget.id,
       dashboard_id: input.dashboardId,
       type: input.type,
-      metric: input.metric,
+      config: input.config,
       by: user.email,
     });
   }
   return widget;
+}
+
+/**
+ * Define a team KPI from the editor. The formula is validated by the safe
+ * parser (no eval) and its referenced metrics must be known metric keys.
+ * RLS ("kpi_definitions_insert_writers") restricts this to editors/admins.
+ */
+export async function createKpiDefinition(input: {
+  teamId: string;
+  name: string;
+  formula: string;
+}): Promise<KpiDefinition> {
+  const name = input.name.trim();
+  const formula = input.formula.trim();
+  if (!name) throw new Error("KPI name is required");
+
+  const parsed = parseFormula(formula);
+  if (!parsed.ok) throw new Error(`Invalid formula: ${parsed.error}`);
+
+  const supabase = createClient();
+  const user = await requireUser();
+
+  // Referenced metrics must be built-in or defined for this team.
+  const { data: defs } = await supabase
+    .from("metric_definitions")
+    .select("key")
+    .or(`team_id.is.null,team_id.eq.${input.teamId}`);
+  const known = new Set<string>([
+    ...BUILTIN_METRICS,
+    ...((defs ?? []).map((d) => d.key as string)),
+  ]);
+  const unknown = parsed.metrics.filter((m) => !known.has(m));
+  if (unknown.length > 0) {
+    throw new Error(`Unknown metric(s): ${unknown.join(", ")}`);
+  }
+
+  const { data, error } = await supabase
+    .from("kpi_definitions")
+    .insert({ team_id: input.teamId, name, formula, created_by: user.id })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw new Error(
+      error.code === "23505"
+        ? `A KPI named "${name}" already exists`
+        : `Could not create KPI: ${error.message}`
+    );
+  }
+
+  await recordAudit({
+    teamId: input.teamId,
+    actorId: user.id,
+    actorEmail: user.email,
+    action: "kpi.created",
+    entityType: "kpi_definition",
+    entityId: data.id,
+    metadata: { name, formula },
+  });
+
+  return data as KpiDefinition;
 }
 
 export async function updateWidgetPosition(
