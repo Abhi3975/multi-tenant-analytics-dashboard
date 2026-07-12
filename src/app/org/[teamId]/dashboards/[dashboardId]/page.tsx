@@ -5,6 +5,8 @@ import { requireUser, getTeamRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { canWrite, type Widget } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
+import { KpiPanel } from "@/components/dashboard/kpi-panel";
+import { PresenceBar } from "@/components/dashboard/presence-bar";
 import { GridEditor } from "./grid-editor";
 
 export default async function DashboardPage({
@@ -45,7 +47,7 @@ export default async function DashboardPage({
           ← Dashboards
         </Link>
       </div>
-      <header className="mb-6 flex items-center gap-3">
+      <header className="mb-6 flex flex-wrap items-center gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">
           {dashboard.name}
         </h1>
@@ -57,7 +59,22 @@ export default async function DashboardPage({
             View only — editing is disabled for your role.
           </span>
         )}
+        <div className="ml-auto">
+          <PresenceBar
+            dashboardId={dashboardId}
+            email={user.email ?? user.id}
+            role={role}
+            canEdit={writable}
+          />
+        </div>
       </header>
+
+      <section className="mb-6">
+        <h2 className="mb-2 text-sm font-medium text-muted-foreground">
+          Team KPIs
+        </h2>
+        <KpiPanel teamId={teamId} />
+      </section>
 
       <GridEditor
         dashboardId={dashboardId}
