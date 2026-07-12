@@ -168,6 +168,14 @@ function MetricWidgetView({
     );
   }
 
+  if (rows.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-center text-xs text-muted-foreground">
+        No data yet — run <code className="mx-1">npm run simulate</code>
+      </div>
+    );
+  }
+
   return (
     <div className="relative h-full w-full">
       {anomalyCount > 0 && (
