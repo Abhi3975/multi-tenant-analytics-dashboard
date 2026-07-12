@@ -89,6 +89,24 @@ Try it:
   flagged: red dots on the charts, a count badge, and an "anomaly" tag on KPI
   cards. Run `npm run simulate` for a minute or two and spikes will appear.
 
+## Tier 3: hierarchy, webhooks, audit, custom metrics
+
+- **Projects** — The hierarchy is now Organization → Team → **Project** →
+  Dashboard. The team page groups dashboards by project; writers can create
+  projects and add dashboards to them. (Memberships remain team-scoped — access
+  to a project is access to its team.)
+- **Custom metric definitions** — `/org/[teamId]/metrics` (editors/admins) lets a
+  team define metrics beyond the four built-ins. Metric data is validated against
+  definitions by a DB trigger. New keys immediately appear in widget pickers.
+- **Webhooks** — `/org/[teamId]/webhooks` (admins) registers signed webhooks that
+  fire on `dashboard.created` / `dashboard.deleted` / `widget.added` /
+  `widget.removed`. Each POST carries an `X-Webhook-Signature` (HMAC-SHA256) and
+  every attempt is logged. Tip: point one at a https://webhook.site URL, then add
+  a widget and watch it arrive.
+- **Audit logs** — `/org/[teamId]/audit` (admins) shows an immutable, server-written
+  trail of who did what. Users cannot insert or alter entries (no RLS write policy;
+  only the service role writes).
+
 ## How permissions are enforced
 
 Every table has Row Level Security enabled. A user can only read/write rows for

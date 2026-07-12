@@ -143,7 +143,29 @@ Verified live: `metric_kpis` stays RLS-isolated (Carol sees only Marketing), and
 a Realtime `widgets` INSERT is delivered to an authorized subscriber over the
 filtered channel.
 
-Next: **Tier 3** (add Project level, webhooks, audit logs, custom metric defs).
+**Tier 3 complete.** Implemented:
+
+- **Projects**: Team → Project → Dashboard. `projects` table; dashboards carry
+  `project_id`; team page groups dashboards by project with New Project / New
+  Dashboard (writers). Memberships stay team-scoped — a project's access is its
+  team's access (documented tradeoff, keeps Tier 1/2 RLS intact).
+- **Custom metric definitions**: `metric_definitions` (global built-ins +
+  per-team custom); the `metrics.metric_name` CHECK was replaced by a
+  definition-backed validation trigger. `/org/[teamId]/metrics` (writers) manages
+  them; widget metric pickers read them.
+- **Webhooks**: `webhooks` + `webhook_deliveries`; admin-only `/webhooks` page.
+  `lib/webhooks.ts dispatchWebhook` (service role) fires HMAC-SHA256-signed POSTs
+  on dashboard/widget events and logs every delivery.
+- **Audit logs**: `audit_logs` written server-side via `lib/audit.ts recordAudit`
+  (service role; no user INSERT policy — tamper-proof). Admin-only `/audit` page.
+
+Verified live via API: RLS on every new table (projects member-scoped; metric
+defs global+own with writer-only writes and no global creation; webhooks &
+audit admin-only, editor blocked); the metric validation trigger rejects unknown
+keys (400); and webhook delivery round-trips with a valid HMAC signature +
+delivery log.
+
+All three tiers complete.
 
 Note: table GRANTs for `authenticated`/`service_role` live in
 `supabase/migrations/20260712120300_grants.sql` — required or PostgREST returns
