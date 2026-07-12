@@ -34,6 +34,10 @@ yarn-error.log*
 # local claude code settings
 .claude/
 
+# supabase cli local runtime artifacts
+supabase/.branches/
+supabase/.temp/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts
