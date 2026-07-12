@@ -18,6 +18,29 @@ import { AlertTriangle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import type { Metric, MetricName, WidgetConfig, WidgetType } from "@/lib/types";
 import { detectAnomalies, mean, stddev, zScore } from "@/lib/anomaly";
+import { KpiWidgetView } from "@/components/dashboard/kpi-widget-view";
+
+/** Switches between a metric-backed chart/stat and a computed KPI tile. */
+export function WidgetView({
+  teamId,
+  type,
+  config,
+}: {
+  teamId: string;
+  type: WidgetType;
+  config: WidgetConfig;
+}) {
+  if (type === "kpi") {
+    return <KpiWidgetView teamId={teamId} config={config} />;
+  }
+  return (
+    <MetricWidgetView
+      teamId={teamId}
+      type={type}
+      metric={config.metric ?? "revenue"}
+    />
+  );
+}
 
 const POINTS = 30;
 const REFRESH_MS = 4000;
@@ -53,14 +76,14 @@ const ANOMALY_COLOR = "hsl(var(--destructive))";
  * Reads the `metrics` table (team_id + metric_name), scoped by RLS to the
  * current user, refreshes on an interval, and flags anomalies (z-score).
  */
-export function WidgetView({
+function MetricWidgetView({
   teamId,
   type,
-  config,
+  metric,
 }: {
   teamId: string;
-  type: WidgetType;
-  config: WidgetConfig;
+  type: Exclude<WidgetType, "kpi">;
+  metric: MetricName;
 }) {
   const [raw, setRaw] = useState<{ t: string; value: number }[]>([]);
 
@@ -73,7 +96,7 @@ export function WidgetView({
         .from("metrics")
         .select("value, recorded_at")
         .eq("team_id", teamId)
-        .eq("metric_name", config.metric)
+        .eq("metric_name", metric)
         .order("recorded_at", { ascending: false })
         .limit(POINTS);
 
@@ -91,7 +114,7 @@ export function WidgetView({
       active = false;
       clearInterval(id);
     };
-  }, [teamId, config.metric]);
+  }, [teamId, metric]);
 
   const { rows, anomalyCount, latest, latestIsAnomaly, delta } = useMemo(() => {
     const values = raw.map((r) => r.value);
@@ -120,7 +143,7 @@ export function WidgetView({
       <div className="flex h-full flex-col justify-center">
         <div className="flex items-center gap-2">
           <span className="text-3xl font-semibold tabular-nums">
-            {latest === null ? "—" : formatValue(config.metric, latest)}
+            {latest === null ? "—" : formatValue(metric, latest)}
           </span>
           {latestIsAnomaly && (
             <AlertTriangle
@@ -137,7 +160,7 @@ export function WidgetView({
                 : "text-xs text-destructive"
             }
           >
-            {delta >= 0 ? "▲" : "▼"} {formatValue(config.metric, Math.abs(delta))}{" "}
+            {delta >= 0 ? "▲" : "▼"} {formatValue(metric, Math.abs(delta))}{" "}
             vs previous
           </div>
         )}
@@ -160,7 +183,7 @@ export function WidgetView({
             <XAxis dataKey="t" tick={{ fontSize: 10 }} minTickGap={24} />
             <YAxis tick={{ fontSize: 10 }} width={44} />
             <Tooltip
-              formatter={(value) => formatValue(config.metric, Number(value))}
+              formatter={(value) => formatValue(metric, Number(value))}
             />
             <Bar dataKey="value" radius={[2, 2, 0, 0]}>
               {rows.map((r, i) => (
@@ -174,7 +197,7 @@ export function WidgetView({
             <XAxis dataKey="t" tick={{ fontSize: 10 }} minTickGap={24} />
             <YAxis tick={{ fontSize: 10 }} width={44} />
             <Tooltip
-              formatter={(value) => formatValue(config.metric, Number(value))}
+              formatter={(value) => formatValue(metric, Number(value))}
             />
             <Line
               type="monotone"
