@@ -10,7 +10,8 @@
     "simulate": "tsx scripts/simulate-metrics.ts",
     "verify:collab": "tsx scripts/verify-collab.ts",
     "verify:rls": "tsx scripts/verify-rls.ts",
-    "verify:kpi": "tsx scripts/verify-kpi-anomaly.ts"
+    "verify:kpi": "tsx scripts/verify-kpi-anomaly.ts",
+    "verify:isolation": "tsx scripts/verify-isolation.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -106,8 +106,8 @@ async function main() {
   await cleanupMembership();
 
   // --- Custom metric definitions ---
-  check("alice sees 5 metric defs (4 builtin + signups)", (await (await alice.from("metric_definitions").select("id")).data?.length) === 5);
-  check("carol sees 4 metric defs (builtins)", (await (await carol.from("metric_definitions").select("id")).data?.length) === 4);
+  check("alice sees 6 metric defs (5 builtin + signups)", (await (await alice.from("metric_definitions").select("id")).data?.length) === 6);
+  check("carol sees 5 metric defs (builtins)", (await (await carol.from("metric_definitions").select("id")).data?.length) === 5);
   check(
     "editor can define custom metric",
     await canInsert(bob, "metric_definitions", { team_id: FIN, key: "trials_test", label: "T" }, admin)
