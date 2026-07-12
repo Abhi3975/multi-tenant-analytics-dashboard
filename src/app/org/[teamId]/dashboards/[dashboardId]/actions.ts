@@ -1,6 +1,9 @@
 "use server";
 
+import { requireUser } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import { recordAudit } from "@/lib/audit";
+import { dispatchWebhook } from "@/lib/webhooks";
 import type {
   MetricName,
   Widget,
@@ -8,6 +11,17 @@ import type {
   WidgetPosition,
   WidgetType,
 } from "@/lib/types";
+
+/** Look up the team that owns a dashboard (for audit/webhook context). */
+async function teamForDashboard(dashboardId: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("dashboards")
+    .select("team_id")
+    .eq("id", dashboardId)
+    .maybeSingle();
+  return data?.team_id ?? null;
+}
 
 /**
  * All of these writes are enforced by RLS ("widgets_*_writers" ->
@@ -34,7 +48,29 @@ export async function addWidget(input: {
     .single();
 
   if (error) throw new Error(`Could not add widget: ${error.message}`);
-  return data as Widget;
+
+  const widget = data as Widget;
+  const user = await requireUser();
+  const teamId = await teamForDashboard(input.dashboardId);
+  if (teamId) {
+    await recordAudit({
+      teamId,
+      actorId: user.id,
+      actorEmail: user.email,
+      action: "widget.added",
+      entityType: "widget",
+      entityId: widget.id,
+      metadata: { dashboard_id: input.dashboardId, type: input.type, metric: input.metric },
+    });
+    await dispatchWebhook(teamId, "widget.added", {
+      widget_id: widget.id,
+      dashboard_id: input.dashboardId,
+      type: input.type,
+      metric: input.metric,
+      by: user.email,
+    });
+  }
+  return widget;
 }
 
 export async function updateWidgetPosition(
@@ -63,6 +99,35 @@ export async function updateWidgetConfig(
 
 export async function removeWidget(widgetId: string): Promise<void> {
   const supabase = createClient();
+
+  // Capture dashboard/team before deleting, for audit + webhooks.
+  const { data: existing } = await supabase
+    .from("widgets")
+    .select("id, dashboard_id")
+    .eq("id", widgetId)
+    .maybeSingle();
+
   const { error } = await supabase.from("widgets").delete().eq("id", widgetId);
   if (error) throw new Error(`Could not remove widget: ${error.message}`);
+
+  if (existing) {
+    const user = await requireUser();
+    const teamId = await teamForDashboard(existing.dashboard_id);
+    if (teamId) {
+      await recordAudit({
+        teamId,
+        actorId: user.id,
+        actorEmail: user.email,
+        action: "widget.removed",
+        entityType: "widget",
+        entityId: widgetId,
+        metadata: { dashboard_id: existing.dashboard_id },
+      });
+      await dispatchWebhook(teamId, "widget.removed", {
+        widget_id: widgetId,
+        dashboard_id: existing.dashboard_id,
+        by: user.email,
+      });
+    }
+  }
 }
