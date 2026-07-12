@@ -1,147 +1,105 @@
 # Multi-Tenant Analytics Dashboard
 
-Hierarchical, multi-tenant analytics dashboards with role-based collaboration.
-Built with Next.js 14 (App Router), TypeScript, Tailwind + shadcn/ui, Supabase
-(Postgres + Auth + RLS), dnd-kit, and Recharts.
+A hierarchical, multi-tenant analytics platform with real-time collaboration.
+Organizations contain teams; teams contain projects; projects contain dashboards
+built from live metrics. Access is isolated per tenant and enforced at the
+database level with Postgres Row Level Security.
 
-See [`CLAUDE.md`](./CLAUDE.md) for the full architecture: data hierarchy
-(Organization → Team → Project → Member), the three roles (Admin/Editor/Viewer),
-and the build tiers.
+**Stack:** Next.js 14 (App Router, TypeScript) · Tailwind + shadcn/ui · Supabase
+(Postgres, Auth, Realtime, RLS) · dnd-kit · Recharts.
 
-## Getting started
+- Architecture & conventions: [`CLAUDE.md`](./CLAUDE.md)
+- How it was built (honest prompt log): [`PROMPTS.md`](./PROMPTS.md)
+- Manual + automated test plan: [`TESTING.md`](./TESTING.md)
+- Deploying to Vercel + hosted Supabase: [`DEPLOY.md`](./DEPLOY.md)
 
-### 1. Start the database (Supabase)
+---
+
+## Demo users
+
+Three seeded users (password **`password123`**) demonstrate isolation and roles:
+
+| Email | Team | Role | Can… |
+| --- | --- | --- | --- |
+| `alice@example.com` | Finance | **admin** | everything: manage members, webhooks, audit, build dashboards |
+| `bob@example.com` | Finance | **editor** | build/edit dashboards, widgets, KPIs, metrics |
+| `carol@example.com` | Marketing | **viewer** | read Marketing only; no edit controls |
+
+Alice/Bob see **only Finance**; Carol sees **only Marketing** — enforced by RLS.
+
+## Quick start (local)
 
 Requires Docker + the [Supabase CLI](https://supabase.com/docs/guides/local-development).
 
 ```bash
-supabase start          # applies migrations in supabase/migrations + seed.sql
-supabase status         # prints your local URL + keys
-```
-
-Details and reset instructions: [`supabase/README.md`](./supabase/README.md).
-
-### 2. Configure env
-
-Copy the values from `supabase status` into `.env.local`:
-
-```bash
-cp .env.local.example .env.local
-# then set:
-#   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
-#   NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
-#   SUPABASE_SERVICE_ROLE_KEY=<service_role key>
-```
-
-### 3. Run the app
-
-```bash
+supabase start                 # applies migrations + seed
+# copy the printed keys into .env.local (see .env.local.example)
 npm install
-npm run dev             # http://localhost:3000
+npm run dev                    # http://localhost:3000
+npm run simulate               # (2nd terminal) live metric data + anomalies
 ```
 
-### 4. Stream live demo data (optional but recommended)
+Sign in at `/login` (the demo users are listed there).
 
-In a second terminal, insert plausible metrics every few seconds for every team:
+## Tier breakdown
 
-```bash
-npm run simulate        # reads .env.local, Ctrl+C to stop
-```
+Legend: ✅ done · 🟡 partial / deviation · ❌ not done
 
-Dashboards poll the `metrics` table, so charts animate while this runs.
+### Tier 1 — Foundation ✅
+- ✅ Organization → Team hierarchy, three roles (admin/editor/viewer)
+- ✅ Dashboards with line/bar/stat widgets (Recharts), dnd-kit add/move/resize/remove
+- ✅ Persistence (`widgets.position` jsonb), metric simulator
+- ✅ **RLS tenant isolation** on every table
 
-## Tier 1 demo walkthrough
+### Tier 2 — Collaboration & intelligence ✅
+- ✅ Real-time multi-user editing (Realtime Postgres Changes on `widgets` +
+  `dashboards`) with presence and flicker-free reconciliation (last-write-wins)
+- ✅ **Computed KPIs**: `kpi_definitions` + a **safe formula evaluator**
+  (restricted grammar, no `eval`), KPI widgets that recompute live via metrics
+  Realtime (e.g. ARPU = `revenue / users`)
+- ✅ **Anomaly detection**: a server-side rolling-window z-score detector
+  (Postgres trigger) writing `anomaly_alerts`, surfaced as widget badges and a
+  **notification bell** with live toasts
 
-Three seeded users (password: **`password123`**) demonstrate tenant isolation and
-role-based permissions. Sign in at `/login` (the login screen lists them):
-
-| User                | Team      | Role   | What you can do                                     |
-| ------------------- | --------- | ------ | --------------------------------------------------- |
-| `alice@example.com` | Finance   | admin  | See Finance only; create/edit dashboards + widgets  |
-| `bob@example.com`   | Finance   | editor | See Finance only; create/edit dashboards + widgets  |
-| `carol@example.com` | Marketing | viewer | See Marketing only; **view only**, no edit controls |
-
-Try it:
-
-1. **Isolation** — Sign in as `alice`: you only see the **Finance** team and its
-   data. Sign in as `carol`: you only see **Marketing**. Neither can see the
-   other's data — enforced by Postgres RLS, not just the UI.
-2. **Editor builds a dashboard** — As `alice`/`bob`, open the Finance team →
-   **New Dashboard** → add line/bar/stat widgets, drag to move, drag the
-   bottom-right handle to resize. Layout persists (position saved to
-   `widgets.position`); reload to confirm.
-3. **Viewer is read-only** — As `carol`, open a Marketing dashboard: charts
-   render fully, but there are **no** drag handles, add/remove, or config
-   controls. Even a hand-crafted write is rejected by RLS.
-
-## Tier 2: collaboration & intelligence
-
-- **Realtime co-editing** — Open the same dashboard in two windows (e.g. `alice`
-  and `bob`, both Finance). When one adds / moves / resizes / removes a widget,
-  the other sees it live. Backed by Supabase Realtime on the `widgets` table,
-  RLS-scoped so only teammates receive the changes.
-- **Presence** — The dashboard header shows who else is currently viewing it;
-  editors/admins get a green "can edit" ring.
-- **KPI calculations** — The "Team KPIs" row is computed in Postgres by the
-  `metric_kpis` view (latest, Δ% vs previous, average) and refreshes live. The
-  view uses `security_invoker`, so RLS still isolates tenants.
-- **Anomaly detection** — Metric points more than 2.5σ from the series mean are
-  flagged: red dots on the charts, a count badge, and an "anomaly" tag on KPI
-  cards. Run `npm run simulate` for a minute or two and spikes will appear.
-
-## Tier 3: hierarchy, webhooks, audit, custom metrics
-
-- **Projects** — The hierarchy is now Organization → Team → **Project** →
-  Dashboard. The team page groups dashboards by project; writers can create
-  projects and add dashboards to them. (Memberships remain team-scoped — access
-  to a project is access to its team.)
-- **Custom metric definitions** — `/org/[teamId]/metrics` (editors/admins) lets a
-  team define metrics beyond the four built-ins. Metric data is validated against
-  definitions by a DB trigger. New keys immediately appear in widget pickers.
-- **Webhooks** — `/org/[teamId]/webhooks` (admins) registers signed webhooks that
-  fire on `dashboard.created` / `dashboard.deleted` / `widget.added` /
-  `widget.removed`. Each POST carries an `X-Webhook-Signature` (HMAC-SHA256) and
-  every attempt is logged. Tip: point one at a https://webhook.site URL, then add
-  a widget and watch it arrive.
-- **Audit logs** — `/org/[teamId]/audit` (admins) shows an immutable, server-written
-  trail of who did what. Users cannot insert or alter entries (no RLS write policy;
-  only the service role writes).
-
-## How permissions are enforced
-
-Every table has Row Level Security enabled. A user can only read/write rows for
-teams they have a `memberships` row in; viewers get read-only, editors/admins can
-write, and only admins manage memberships. The app UI hides controls by role, but
-the **database is the security boundary** — see `supabase/migrations` and the
-explanation in the task notes / `CLAUDE.md`.
-
-## Scripts
-
-| Command            | Description                                        |
-| ------------------ | -------------------------------------------------- |
-| `npm run dev`           | Next.js dev server                                     |
-| `npm run build`         | Production build                                       |
-| `npm run simulate`      | Insert live demo metrics for every team                |
-| `npm run verify:rls`    | Assert RLS guarantees with the 3 seeded users          |
-| `npm run verify:collab` | Assert realtime collaboration across two clients       |
-| `npm run lint`          | ESLint                                                 |
+### Tier 3 — Advanced 🟡 (mostly done)
+- ✅ Three-level hierarchy: **Projects** between teams and dashboards
+- ✅ **Audit logs** (`audit_logs`, admin-only page, tamper-proof/service-written)
+- ✅ **Custom metric definitions** (admin/editor), selectable in widget/KPI builders
+- ✅ **Webhooks**: admin registration, HMAC-SHA256 signing, **retry with backoff**,
+  delivery log, SSRF guard
+- 🟡 **Deviation:** webhook delivery is a Next.js **server action**, not a Supabase
+  **Edge Function** triggered on DB events
+- 🟡 **Deviation:** metrics are **team-scoped**, not project-scoped (memberships
+  stay team-scoped as the RLS unit; a project's access == its team's access)
 
 ## Verification
 
-Two committed suites exercise the security and realtime behavior against the
-running local stack (no mocks):
+Committed suites that run against the live local stack (no mocks):
 
-- `npm run verify:rls` — signs in as Alice/Bob/Carol and asserts tenant
-  isolation, role-based writes, admin-only membership/webhook/audit surfaces,
-  custom-metric rules, and the metric validation trigger (23 checks).
-- `npm run verify:collab` — two concurrent authenticated clients; asserts widget
-  add/move/remove and dashboard rename propagate (~<1s) and Presence sees both.
+| Command | Checks |
+| --- | --- |
+| `npm run verify:isolation` | Marketing viewer directly querying Finance returns **0 rows** + write denied |
+| `npm run verify:rls` | 23 RLS assertions (isolation, role writes, admin-only surfaces, custom metrics) |
+| `npm run verify:collab` | 2 clients: widget add/move/remove + rename propagate <1s, presence |
+| `npm run verify:kpi` | ARPU KPI evaluates live; anomaly trigger fires + alert delivered <1s |
 
-See `TESTING.md` for the manual two-browser plan.
+## Known limitations / shortcuts (48-hour scope)
 
-## Team administration (admins)
+- **Webhooks are a server action, not an Edge Function**, and there's no invite
+  email for non-existent users (add-member resolves existing users only).
+- **Metrics are team-scoped**, not project-scoped.
+- **Seed users are local-only** — `seed.sql` inserts into `auth.users` directly,
+  which works for `supabase start` but not `db push`; hosted deploys must create
+  the users via the Auth API (see `DEPLOY.md`).
+- Anomaly detection is a **fixed rolling window (last 20 readings, >2σ)** — simple
+  and explainable, not seasonal/trend-aware.
+- No automated component/E2E UI tests; verification is at the data/realtime layer
+  via the scripts above plus a manual browser pass (`TESTING.md`).
 
-From a team page, admins get **Members** (add by email, change role, remove —
-RLS-enforced, audit-logged), **Webhooks**, and **Audit**; editors get **Metrics**.
-Webhook URLs are validated against SSRF (loopback/private/link-local blocked;
-set `WEBHOOK_ALLOW_LOCAL=true` to allow local targets in dev).
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `npm run dev` / `build` / `lint` | standard Next.js |
+| `npm run simulate` | stream live demo metrics (with occasional spikes) |
+| `npm run verify:isolation` / `:rls` / `:collab` / `:kpi` | verification suites |
